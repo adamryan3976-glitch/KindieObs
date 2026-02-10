@@ -53,7 +53,7 @@
 
     <header class="bg-blue-600 text-white p-6 shadow-md text-center sticky top-0 z-10">
         <h1 class="text-2xl font-bold tracking-tight">K-Doc</h1>
-        <p class="text-xs opacity-90 uppercase tracking-widest font-semibold">Class Connectivity v2.2</p>
+        <p class="text-xs opacity-90 uppercase tracking-widest font-semibold">Class Connectivity v2.4</p>
     </header>
 
     <main class="max-w-md mx-auto p-4 space-y-6">
@@ -73,9 +73,10 @@
                 <img id="preview" src="" alt="Preview">
             </label>
             <button id="retakeBtn" class="hidden w-full text-xs text-blue-600 font-medium py-2">Change Photo</button>
+            <canvas id="compressCanvas" class="hidden"></canvas>
         </section>
 
-        <!-- Step 2: Details -->
+        <!-- Step 2: Details Form -->
         <form id="docForm" class="space-y-5 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
             <h2 class="font-bold text-gray-800 flex items-center">
                 <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">2</span>
@@ -91,7 +92,6 @@
                     </div>
                     
                     <div id="relayContainer" class="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-4">
-                        <p class="text-[11px] text-slate-600 mb-3 leading-relaxed">Opening the Data Relay will sync your classes from the spreadsheet.</p>
                         <button type="button" onclick="startRelay()" class="w-full bg-slate-800 text-white py-3 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">
                             Open Data Relay
                         </button>
@@ -105,9 +105,7 @@
 
             <div id="studentContainer" class="hidden">
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Select Student(s)</label>
-                <div id="studentList" class="flex flex-wrap gap-2">
-                    <!-- Student chips -->
-                </div>
+                <div id="studentList" class="flex flex-wrap gap-2"></div>
             </div>
 
             <hr class="border-slate-100">
@@ -128,12 +126,9 @@
                 </select>
             </div>
 
-            <!-- Dynamic Expectations List -->
             <div id="expectationContainer" class="hidden">
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Specific Expectations</label>
-                <div id="expectationList" class="flex flex-col gap-2">
-                    <!-- Expectation chips will appear here -->
-                </div>
+                <div id="expectationList" class="flex flex-col gap-2"></div>
             </div>
 
             <div>
@@ -151,41 +146,19 @@
     </main>
 
     <script>
-        const scriptURL = "https://script.google.com/macros/s/AKfycbxv4DDyyIZLBGiUNambod8YZlNclUjmUWfSdthiL5HoPHohFItLxHC36_mEuct0g8N1pA/exec"; 
+        // Updated with your latest Web App URL
+        const scriptURL = "https://script.google.com/macros/s/AKfycbyKEE40IhdXi4Ss75DnI1q6XF7pupHq2xBYJ3RISXXUA98LuPq53d00BRY1nohUm0mleQ/exec"; 
         
         let allClassData = {};
         let selectedStudents = new Set();
         let selectedExpectations = new Set();
+        let compressedImageData = "";
 
         const expectationsMap = {
-            "Belonging and Contributing": [
-                "1. Communicate with others in a variety of ways",
-                "3. Identify and use personal strategies to help them succeed",
-                "4. Demonstrate a sense of identity and a positive self-image",
-                "22. Communicate their thoughts and feelings",
-                "25. Demonstrate a sense of belonging to a group"
-            ],
-            "Self-Regulation and Well-Being": [
-                "2. Demonstrate independence and a willingness to take responsibility",
-                "6. Demonstrate an awareness of their own thoughts and feelings",
-                "7. Describe some natural elements and the role they play",
-                "8. Recognize and apply their own and others' strengths",
-                "31. Identify and use strategies for self-regulation"
-            ],
-            "Demonstrating Literacy and Mathematics Behaviours": [
-                "11. Demonstrate an appreciation and understanding of creative work",
-                "15. Demonstrate an awareness of the world of print and book conventions",
-                "17. Describe at least one way they use math in their daily lives",
-                "20. Use math words and symbols to communicate their thinking",
-                "21. Express their responses to a variety of text"
-            ],
-            "Problem Solving and Innovating": [
-                "13. Use various strategies to solve problems",
-                "14. Use a variety of forms of communication to document their learning",
-                "23. Design and build structures and use technological tools",
-                "24. Use the processes and skills of an inquiry sequence",
-                "29. Make predictions and observations during investigations"
-            ]
+            "Belonging and Contributing": ["1. Communicate with others", "3. Identify personal strategies", "4. Positive self-image", "22. Communicate thoughts/feelings", "25. Sense of belonging"],
+            "Self-Regulation and Well-Being": ["2. Demonstrate independence", "6. Awareness of thoughts", "7. Natural elements role", "8. Recognize strengths", "31. Strategies for self-regulation"],
+            "Demonstrating Literacy and Mathematics Behaviours": ["11. Appreciate creative work", "15. Awareness of print", "17. Daily math use", "20. Math words/symbols", "21. Response to text"],
+            "Problem Solving and Innovating": ["13. Problem solving strategies", "14. Document learning", "23. Design/build structures", "24. Inquiry sequence skills", "29. Predictions/observations"]
         };
 
         const teacherSelect = document.getElementById('teacherSelect');
@@ -202,23 +175,18 @@
         const docForm = document.getElementById('docForm');
         const statusMsg = document.getElementById('statusMsg');
         const submitBtn = document.getElementById('submitBtn');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
 
-        window.addEventListener("message", (event) => {
-            if (event.data && typeof event.data === 'object' && !event.data.type) {
-                handleSyncSuccess(event.data);
-            }
+        // Listen for message from Relay popup
+        window.addEventListener("message", (e) => { 
+            if (e.data && typeof e.data === 'object' && !e.data.type) handleSyncSuccess(e.data); 
         }, false);
 
-        function startRelay() {
-            const relayURL = `${scriptURL}?relay=true&origin=${encodeURIComponent(window.location.origin)}`;
-            window.open(relayURL, 'KDocRelay', 'width=400,height=400');
+        function startRelay() { 
+            window.open(`${scriptURL}?relay=true`, 'KDocRelay', 'width=400,height=400'); 
         }
 
-        window.handleClassData = function(data) {
-            handleSyncSuccess(data);
-        };
+        // Handle JSONP fallback
+        window.handleClassData = (data) => handleSyncSuccess(data);
 
         function handleSyncSuccess(data) {
             if (data.error) {
@@ -227,98 +195,83 @@
             }
             allClassData = data;
             teacherSelect.innerHTML = '<option value="">Choose Teacher...</option>';
-            Object.keys(allClassData).forEach(teacher => {
+            Object.keys(data).forEach(t => {
                 const opt = document.createElement('option');
-                opt.value = teacher;
-                opt.textContent = teacher;
-                teacherSelect.appendChild(opt);
+                opt.value = t; opt.textContent = t; teacherSelect.appendChild(opt);
             });
             relayContainer.classList.add('hidden');
             teacherSelect.classList.remove('hidden');
-            statusDot.classList.replace('bg-red-500', 'bg-green-500');
-            statusDot.classList.remove('animate-pulse');
-            statusText.innerText = "Online - Synced";
-            statusText.classList.replace('text-slate-500', 'text-green-600');
+            document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-green-500";
+            document.getElementById('statusText').innerText = "Online - Synced";
+            document.getElementById('statusText').classList.replace('text-slate-500', 'text-green-600');
         }
 
-        (function autoAttempt() {
-            const script = document.createElement('script');
-            script.src = `${scriptURL}?callback=handleClassData&v=${Date.now()}`;
-            document.body.appendChild(script);
-        })();
-
-        teacherSelect.addEventListener('change', (e) => {
-            const teacher = e.target.value;
-            studentList.innerHTML = '';
-            selectedStudents.clear();
-            if (teacher && allClassData[teacher]) {
+        teacherSelect.onchange = (e) => {
+            const t = e.target.value; studentList.innerHTML = ''; selectedStudents.clear();
+            if (t && allClassData[t]) {
                 studentContainer.classList.remove('hidden');
-                allClassData[teacher].forEach(name => {
-                    if(!name) return;
+                allClassData[t].forEach(s => {
+                    if (!s) return;
                     const chip = document.createElement('div');
                     chip.className = "chip bg-slate-100 px-4 py-2 rounded-full text-sm font-medium border border-slate-200 active:scale-95";
-                    chip.textContent = name;
+                    chip.textContent = s;
                     chip.onclick = () => {
-                        if (selectedStudents.has(name)) {
-                            selectedStudents.delete(name);
-                            chip.classList.remove('selected');
-                        } else {
-                            selectedStudents.add(name);
-                            chip.classList.add('selected');
-                        }
+                        if (selectedStudents.has(s)) { selectedStudents.delete(s); chip.classList.remove('selected'); }
+                        else { selectedStudents.add(s); chip.classList.add('selected'); }
                     };
                     studentList.appendChild(chip);
                 });
-            } else {
-                studentContainer.classList.add('hidden');
             }
-        });
+        };
 
-        frameSelect.addEventListener('change', (e) => {
-            const frame = e.target.value;
-            expectationList.innerHTML = '';
-            selectedExpectations.clear();
-            if (frame && expectationsMap[frame]) {
+        frameSelect.onchange = (e) => {
+            const f = e.target.value; expectationList.innerHTML = ''; selectedExpectations.clear();
+            if (f && expectationsMap[f]) {
                 expectationContainer.classList.remove('hidden');
-                expectationsMap[frame].forEach(exp => {
+                expectationsMap[f].forEach(exp => {
                     const chip = document.createElement('div');
-                    chip.className = "chip bg-slate-100 px-3 py-2 rounded-lg text-xs border border-slate-200 active:scale-95 text-left leading-tight";
+                    chip.className = "chip bg-slate-100 px-3 py-2 rounded-lg text-xs border border-slate-200 text-left active:scale-95";
                     chip.textContent = exp;
                     chip.onclick = () => {
-                        if (selectedExpectations.has(exp)) {
-                            selectedExpectations.delete(exp);
-                            chip.classList.remove('selected');
-                        } else {
-                            selectedExpectations.add(exp);
-                            chip.classList.add('selected');
-                        }
+                        if (selectedExpectations.has(exp)) { selectedExpectations.delete(exp); chip.classList.remove('selected'); }
+                        else { selectedExpectations.add(exp); chip.classList.add('selected'); }
                     };
                     expectationList.appendChild(chip);
                 });
             } else {
                 expectationContainer.classList.add('hidden');
             }
-        });
+        };
 
-        cameraInput.addEventListener('change', (e) => {
+        cameraInput.onchange = (e) => {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    preview.src = event.target.result;
-                    preview.style.display = 'block';
-                    placeholder.style.display = 'none';
-                    retakeBtn.classList.remove('hidden');
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.getElementById('compressCanvas');
+                        const ctx = canvas.getContext('2d');
+                        const maxW = 800; const scale = maxW / img.width;
+                        canvas.width = maxW; canvas.height = img.height * scale;
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        compressedImageData = canvas.toDataURL("image/jpeg", 0.7);
+                        preview.src = compressedImageData;
+                        preview.style.display = 'block';
+                        placeholder.style.display = 'none';
+                        retakeBtn.classList.remove('hidden');
+                    };
+                    img.src = event.target.result;
                 };
                 reader.readAsDataURL(file);
             }
-        });
+        };
 
         retakeBtn.onclick = () => cameraInput.click();
 
-        docForm.addEventListener('submit', async (e) => {
+        docForm.onsubmit = async (e) => {
             e.preventDefault();
-            if (selectedStudents.size === 0) return showStatus("Select students.", "bg-orange-100 text-orange-700");
+            if (selectedStudents.size === 0) return showStatus("Please select at least one student.", "bg-orange-100 text-orange-700");
             
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loading-spinner"></span> Sending...';
@@ -329,39 +282,32 @@
                 frame: frameSelect.value,
                 expectations: Array.from(selectedExpectations).join('; '),
                 description: document.getElementById('description').value,
-                imageData: preview.src
+                imageData: compressedImageData
             };
 
             try {
-                await fetch(scriptURL, {
-                    method: 'POST',
-                    mode: 'no-cors', 
-                    body: JSON.stringify(payload)
-                });
+                await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
                 showStatus("✅ Observation Submitted!", "bg-green-100 text-green-700");
                 docForm.reset();
-                selectedStudents.clear();
-                selectedExpectations.clear();
-                studentContainer.classList.add('hidden');
-                expectationContainer.classList.add('hidden');
-                preview.style.display = 'none';
-                placeholder.style.display = 'block';
-                retakeBtn.classList.add('hidden');
-                cameraInput.value = "";
-            } catch (err) {
-                showStatus("❌ Submission error.", "bg-red-100 text-red-700");
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Submit Observation";
-            }
-        });
+                selectedStudents.clear(); selectedExpectations.clear();
+                studentContainer.classList.add('hidden'); expectationContainer.classList.add('hidden');
+                preview.style.display = 'none'; placeholder.style.display = 'block';
+                retakeBtn.classList.add('hidden'); compressedImageData = "";
+            } catch (err) { showStatus("❌ Error during submission.", "bg-red-100 text-red-700"); }
+            finally { submitBtn.disabled = false; submitBtn.innerText = "Submit Observation"; }
+        };
 
-        function showStatus(msg, classes) {
-            statusMsg.innerText = msg;
-            statusMsg.className = "p-4 rounded-xl text-sm font-bold shadow-sm " + classes;
-            statusMsg.classList.remove('hidden');
-            setTimeout(() => statusMsg.classList.add('hidden'), 5000);
+        function showStatus(m, c) {
+            statusMsg.innerText = m; statusMsg.className = "p-4 rounded-xl text-sm font-bold shadow-sm " + c;
+            statusMsg.classList.remove('hidden'); setTimeout(() => statusMsg.classList.add('hidden'), 5000);
         }
+
+        // Auto-run attempt to fetch data
+        (function auto() {
+            const s = document.createElement('script');
+            s.src = `${scriptURL}?callback=handleClassData&v=${Date.now()}`;
+            document.body.appendChild(s);
+        })();
     </script>
 </body>
 </html>
