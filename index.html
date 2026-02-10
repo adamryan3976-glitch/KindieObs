@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Doc: Kindergarten Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-file-upload {
+            border: 2px dashed #cbd5e1;
+            display: inline-block;
+            padding: 20px;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+            border-radius: 12px;
+            background: #f8fafc;
+            transition: all 0.2s ease;
+        }
+        #preview {
+            max-width: 100%;
+            border-radius: 12px;
+            display: none;
+            margin: 10px auto 0 auto;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .chip {
+            transition: all 0.2s;
+            cursor: pointer;
+            user-select: none;
+        }
+        .chip.selected {
+            background-color: #2563eb;
+            color: white;
+            border-color: #1e40af;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-10 font-sans">
+
+    <header class="bg-blue-600 text-white p-6 shadow-md text-center sticky top-0 z-10">
+        <h1 class="text-2xl font-bold tracking-tight">K-Doc</h1>
+        <p class="text-xs opacity-90 uppercase tracking-widest font-semibold">Class Connectivity v2.2</p>
+    </header>
+
+    <main class="max-w-md mx-auto p-4 space-y-6">
+        
+        <!-- Step 1: Image -->
+        <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+            <h2 class="font-bold text-gray-800 flex items-center">
+                <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">1</span>
+                Capture Learning
+            </h2>
+            <label class="custom-file-upload">
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
+                <div id="upload-placeholder">
+                    <span class="text-4xl block mb-2">📸</span>
+                    <span class="text-blue-600 font-bold">Tap to Take Photo</span>
+                </div>
+                <img id="preview" src="" alt="Preview">
+            </label>
+            <button id="retakeBtn" class="hidden w-full text-xs text-blue-600 font-medium py-2">Change Photo</button>
+        </section>
+
+        <!-- Step 2: Details -->
+        <form id="docForm" class="space-y-5 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+            <h2 class="font-bold text-gray-800 flex items-center">
+                <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">2</span>
+                Identify Students
+            </h2>
+            
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Select Class/Teacher</label>
+                <div class="relative">
+                    <div id="connectionStatus" class="flex items-center gap-2 mb-2">
+                        <span id="statusDot" class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                        <span id="statusText" class="text-[10px] font-bold text-slate-500 uppercase">Offline - Sync Required</span>
+                    </div>
+                    
+                    <div id="relayContainer" class="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                        <p class="text-[11px] text-slate-600 mb-3 leading-relaxed">Opening the Data Relay will sync your classes from the spreadsheet.</p>
+                        <button type="button" onclick="startRelay()" class="w-full bg-slate-800 text-white py-3 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">
+                            Open Data Relay
+                        </button>
+                    </div>
+
+                    <select id="teacherSelect" class="hidden w-full p-4 bg-slate-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition appearance-none" required>
+                        <option value="">Select Teacher...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="studentContainer" class="hidden">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Select Student(s)</label>
+                <div id="studentList" class="flex flex-wrap gap-2">
+                    <!-- Student chips -->
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <h2 class="font-bold text-gray-800 flex items-center">
+                <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">3</span>
+                Curriculum Alignment
+            </h2>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Kindergarten Frame</label>
+                <select id="frame" class="w-full p-4 bg-slate-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                    <option value="">Select a Frame...</option>
+                    <option value="Belonging and Contributing">Belonging and Contributing</option>
+                    <option value="Self-Regulation and Well-Being">Self-Regulation and Well-Being</option>
+                    <option value="Demonstrating Literacy and Mathematics Behaviours">Demonstrating Literacy and Mathematics Behaviours</option>
+                    <option value="Problem Solving and Innovating">Problem Solving and Innovating</option>
+                </select>
+            </div>
+
+            <!-- Dynamic Expectations List -->
+            <div id="expectationContainer" class="hidden">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Specific Expectations</label>
+                <div id="expectationList" class="flex flex-col gap-2">
+                    <!-- Expectation chips will appear here -->
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Observation Note</label>
+                <textarea id="description" rows="3" placeholder="What did you observe?" class="w-full p-4 bg-slate-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" required></textarea>
+            </div>
+
+            <button type="submit" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 disabled:bg-gray-400 transition-all">
+                Submit Observation
+            </button>
+        </form>
+
+        <div id="statusMsg" class="hidden text-center p-4 rounded-xl text-sm font-bold shadow-sm"></div>
+
+    </main>
+
+    <script>
+        const scriptURL = "https://script.google.com/macros/s/AKfycbxv4DDyyIZLBGiUNambod8YZlNclUjmUWfSdthiL5HoPHohFItLxHC36_mEuct0g8N1pA/exec"; 
+        
+        let allClassData = {};
+        let selectedStudents = new Set();
+        let selectedExpectations = new Set();
+
+        const expectationsMap = {
+            "Belonging and Contributing": [
+                "1. Communicate with others in a variety of ways",
+                "3. Identify and use personal strategies to help them succeed",
+                "4. Demonstrate a sense of identity and a positive self-image",
+                "22. Communicate their thoughts and feelings",
+                "25. Demonstrate a sense of belonging to a group"
+            ],
+            "Self-Regulation and Well-Being": [
+                "2. Demonstrate independence and a willingness to take responsibility",
+                "6. Demonstrate an awareness of their own thoughts and feelings",
+                "7. Describe some natural elements and the role they play",
+                "8. Recognize and apply their own and others' strengths",
+                "31. Identify and use strategies for self-regulation"
+            ],
+            "Demonstrating Literacy and Mathematics Behaviours": [
+                "11. Demonstrate an appreciation and understanding of creative work",
+                "15. Demonstrate an awareness of the world of print and book conventions",
+                "17. Describe at least one way they use math in their daily lives",
+                "20. Use math words and symbols to communicate their thinking",
+                "21. Express their responses to a variety of text"
+            ],
+            "Problem Solving and Innovating": [
+                "13. Use various strategies to solve problems",
+                "14. Use a variety of forms of communication to document their learning",
+                "23. Design and build structures and use technological tools",
+                "24. Use the processes and skills of an inquiry sequence",
+                "29. Make predictions and observations during investigations"
+            ]
+        };
+
+        const teacherSelect = document.getElementById('teacherSelect');
+        const relayContainer = document.getElementById('relayContainer');
+        const studentContainer = document.getElementById('studentContainer');
+        const studentList = document.getElementById('studentList');
+        const frameSelect = document.getElementById('frame');
+        const expectationContainer = document.getElementById('expectationContainer');
+        const expectationList = document.getElementById('expectationList');
+        const cameraInput = document.getElementById('cameraInput');
+        const preview = document.getElementById('preview');
+        const placeholder = document.getElementById('upload-placeholder');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const docForm = document.getElementById('docForm');
+        const statusMsg = document.getElementById('statusMsg');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        window.addEventListener("message", (event) => {
+            if (event.data && typeof event.data === 'object' && !event.data.type) {
+                handleSyncSuccess(event.data);
+            }
+        }, false);
+
+        function startRelay() {
+            const relayURL = `${scriptURL}?relay=true&origin=${encodeURIComponent(window.location.origin)}`;
+            window.open(relayURL, 'KDocRelay', 'width=400,height=400');
+        }
+
+        window.handleClassData = function(data) {
+            handleSyncSuccess(data);
+        };
+
+        function handleSyncSuccess(data) {
+            if (data.error) {
+                showStatus("Error: " + data.error, "bg-red-100 text-red-700");
+                return;
+            }
+            allClassData = data;
+            teacherSelect.innerHTML = '<option value="">Choose Teacher...</option>';
+            Object.keys(allClassData).forEach(teacher => {
+                const opt = document.createElement('option');
+                opt.value = teacher;
+                opt.textContent = teacher;
+                teacherSelect.appendChild(opt);
+            });
+            relayContainer.classList.add('hidden');
+            teacherSelect.classList.remove('hidden');
+            statusDot.classList.replace('bg-red-500', 'bg-green-500');
+            statusDot.classList.remove('animate-pulse');
+            statusText.innerText = "Online - Synced";
+            statusText.classList.replace('text-slate-500', 'text-green-600');
+        }
+
+        (function autoAttempt() {
+            const script = document.createElement('script');
+            script.src = `${scriptURL}?callback=handleClassData&v=${Date.now()}`;
+            document.body.appendChild(script);
+        })();
+
+        teacherSelect.addEventListener('change', (e) => {
+            const teacher = e.target.value;
+            studentList.innerHTML = '';
+            selectedStudents.clear();
+            if (teacher && allClassData[teacher]) {
+                studentContainer.classList.remove('hidden');
+                allClassData[teacher].forEach(name => {
+                    if(!name) return;
+                    const chip = document.createElement('div');
+                    chip.className = "chip bg-slate-100 px-4 py-2 rounded-full text-sm font-medium border border-slate-200 active:scale-95";
+                    chip.textContent = name;
+                    chip.onclick = () => {
+                        if (selectedStudents.has(name)) {
+                            selectedStudents.delete(name);
+                            chip.classList.remove('selected');
+                        } else {
+                            selectedStudents.add(name);
+                            chip.classList.add('selected');
+                        }
+                    };
+                    studentList.appendChild(chip);
+                });
+            } else {
+                studentContainer.classList.add('hidden');
+            }
+        });
+
+        frameSelect.addEventListener('change', (e) => {
+            const frame = e.target.value;
+            expectationList.innerHTML = '';
+            selectedExpectations.clear();
+            if (frame && expectationsMap[frame]) {
+                expectationContainer.classList.remove('hidden');
+                expectationsMap[frame].forEach(exp => {
+                    const chip = document.createElement('div');
+                    chip.className = "chip bg-slate-100 px-3 py-2 rounded-lg text-xs border border-slate-200 active:scale-95 text-left leading-tight";
+                    chip.textContent = exp;
+                    chip.onclick = () => {
+                        if (selectedExpectations.has(exp)) {
+                            selectedExpectations.delete(exp);
+                            chip.classList.remove('selected');
+                        } else {
+                            selectedExpectations.add(exp);
+                            chip.classList.add('selected');
+                        }
+                    };
+                    expectationList.appendChild(chip);
+                });
+            } else {
+                expectationContainer.classList.add('hidden');
+            }
+        });
+
+        cameraInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    preview.src = event.target.result;
+                    preview.style.display = 'block';
+                    placeholder.style.display = 'none';
+                    retakeBtn.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        retakeBtn.onclick = () => cameraInput.click();
+
+        docForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (selectedStudents.size === 0) return showStatus("Select students.", "bg-orange-100 text-orange-700");
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading-spinner"></span> Sending...';
+
+            const payload = {
+                teacher: teacherSelect.value,
+                students: Array.from(selectedStudents).join(', '),
+                frame: frameSelect.value,
+                expectations: Array.from(selectedExpectations).join('; '),
+                description: document.getElementById('description').value,
+                imageData: preview.src
+            };
+
+            try {
+                await fetch(scriptURL, {
+                    method: 'POST',
+                    mode: 'no-cors', 
+                    body: JSON.stringify(payload)
+                });
+                showStatus("✅ Observation Submitted!", "bg-green-100 text-green-700");
+                docForm.reset();
+                selectedStudents.clear();
+                selectedExpectations.clear();
+                studentContainer.classList.add('hidden');
+                expectationContainer.classList.add('hidden');
+                preview.style.display = 'none';
+                placeholder.style.display = 'block';
+                retakeBtn.classList.add('hidden');
+                cameraInput.value = "";
+            } catch (err) {
+                showStatus("❌ Submission error.", "bg-red-100 text-red-700");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Observation";
+            }
+        });
+
+        function showStatus(msg, classes) {
+            statusMsg.innerText = msg;
+            statusMsg.className = "p-4 rounded-xl text-sm font-bold shadow-sm " + classes;
+            statusMsg.classList.remove('hidden');
+            setTimeout(() => statusMsg.classList.add('hidden'), 5000);
+        }
+    </script>
+</body>
+</html>
