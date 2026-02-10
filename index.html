@@ -53,7 +53,7 @@
 
     <header class="bg-blue-600 text-white p-6 shadow-md text-center sticky top-0 z-10">
         <h1 class="text-2xl font-bold tracking-tight">K-Doc</h1>
-        <p class="text-xs opacity-90 uppercase tracking-widest font-semibold">Class Connectivity v2.4</p>
+        <p class="text-xs opacity-90 uppercase tracking-widest font-semibold">Class Connectivity v2.5</p>
     </header>
 
     <main class="max-w-md mx-auto p-4 space-y-6">
@@ -147,7 +147,7 @@
 
     <script>
         // Updated with your latest Web App URL
-        const scriptURL = "https://script.google.com/macros/s/AKfycbyKEE40IhdXi4Ss75DnI1q6XF7pupHq2xBYJ3RISXXUA98LuPq53d00BRY1nohUm0mleQ/exec"; 
+        const scriptURL = "https://script.google.com/macros/s/AKfycbyuLF7xNySVOOwL_v7EXYCRTrYhlZpYPC3uFAE88Bbw7t5zZg9Wd4OSq8bMq_UUN5Dq3g/exec"; 
         
         let allClassData = {};
         let selectedStudents = new Set();
@@ -176,7 +176,6 @@
         const statusMsg = document.getElementById('statusMsg');
         const submitBtn = document.getElementById('submitBtn');
 
-        // Listen for message from Relay popup
         window.addEventListener("message", (e) => { 
             if (e.data && typeof e.data === 'object' && !e.data.type) handleSyncSuccess(e.data); 
         }, false);
@@ -185,14 +184,10 @@
             window.open(`${scriptURL}?relay=true`, 'KDocRelay', 'width=400,height=400'); 
         }
 
-        // Handle JSONP fallback
         window.handleClassData = (data) => handleSyncSuccess(data);
 
         function handleSyncSuccess(data) {
-            if (data.error) {
-                showStatus("Error: " + data.error, "bg-red-100 text-red-700");
-                return;
-            }
+            if (data.error) { showStatus("Sync Error", "bg-red-100"); return; }
             allClassData = data;
             teacherSelect.innerHTML = '<option value="">Choose Teacher...</option>';
             Object.keys(data).forEach(t => {
@@ -203,7 +198,6 @@
             teacherSelect.classList.remove('hidden');
             document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-green-500";
             document.getElementById('statusText').innerText = "Online - Synced";
-            document.getElementById('statusText').classList.replace('text-slate-500', 'text-green-600');
         }
 
         teacherSelect.onchange = (e) => {
@@ -238,9 +232,7 @@
                     };
                     expectationList.appendChild(chip);
                 });
-            } else {
-                expectationContainer.classList.add('hidden');
-            }
+            } else { expectationContainer.classList.add('hidden'); }
         };
 
         cameraInput.onchange = (e) => {
@@ -271,7 +263,7 @@
 
         docForm.onsubmit = async (e) => {
             e.preventDefault();
-            if (selectedStudents.size === 0) return showStatus("Please select at least one student.", "bg-orange-100 text-orange-700");
+            if (selectedStudents.size === 0) return showStatus("Select students.", "bg-orange-100");
             
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loading-spinner"></span> Sending...';
@@ -286,14 +278,18 @@
             };
 
             try {
-                await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                await fetch(scriptURL, { 
+                    method: 'POST', 
+                    mode: 'no-cors', 
+                    body: JSON.stringify(payload)
+                });
                 showStatus("✅ Observation Submitted!", "bg-green-100 text-green-700");
                 docForm.reset();
                 selectedStudents.clear(); selectedExpectations.clear();
                 studentContainer.classList.add('hidden'); expectationContainer.classList.add('hidden');
                 preview.style.display = 'none'; placeholder.style.display = 'block';
                 retakeBtn.classList.add('hidden'); compressedImageData = "";
-            } catch (err) { showStatus("❌ Error during submission.", "bg-red-100 text-red-700"); }
+            } catch (err) { showStatus("❌ Error.", "bg-red-100"); }
             finally { submitBtn.disabled = false; submitBtn.innerText = "Submit Observation"; }
         };
 
@@ -302,7 +298,6 @@
             statusMsg.classList.remove('hidden'); setTimeout(() => statusMsg.classList.add('hidden'), 5000);
         }
 
-        // Auto-run attempt to fetch data
         (function auto() {
             const s = document.createElement('script');
             s.src = `${scriptURL}?callback=handleClassData&v=${Date.now()}`;
