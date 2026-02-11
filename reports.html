@@ -23,10 +23,10 @@
             border-radius: 6px;
             cursor: zoom-in;
             transition: opacity 0.2s;
+            background-color: #f1f5f9;
         }
         .img-thumbnail:hover { opacity: 0.8; }
 
-        /* Fullscreen Image Modal */
         #imageModal {
             display: none;
             position: fixed;
@@ -64,7 +64,6 @@
     </header>
 
     <main class="max-w-7xl mx-auto p-4 md:p-8">
-        <!-- Filters Bar -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 no-print">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
@@ -112,7 +111,7 @@
                 <table class="w-full text-left report-table">
                     <thead>
                         <tr class="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-100">
-                            <th class="px-6 py-4 font-bold">Date</th>
+                            <th class="px-6 py-4 font-bold">Date & Time</th>
                             <th class="px-6 py-4 font-bold">Photo</th>
                             <th class="px-6 py-4 font-bold">Students</th>
                             <th class="px-6 py-4 font-bold">Curriculum Frame</th>
@@ -131,133 +130,155 @@
         </div>
     </main>
 
-    <!-- Modal for viewing full size image -->
     <div id="imageModal" onclick="this.style.display='none'">
         <img id="modalImg" class="max-w-full max-h-full rounded-lg shadow-2xl" src="" alt="Full view">
     </div>
 
     <script>
-        const scriptURL = "https://script.google.com/macros/s/AKfycby_-5K5U40NT0lrY7H5u6otPKwEO8-a9ZdUtxuW1CPVcA6f7w0Xlv-anhUvMIKXynLHKw/exec";
-        
-        let rawData = [];
-        const tableWrapper = document.getElementById('tableWrapper');
-        const reportRows = document.getElementById('reportRows');
-        const loadingState = document.getElementById('loadingState');
-        const emptyState = document.getElementById('emptyState');
-        const teacherFilter = document.getElementById('teacherFilter');
-        const studentFilter = document.getElementById('studentFilter');
-        const statCount = document.getElementById('statCount');
-        const refreshBtn = document.getElementById('refreshBtn');
+        (function() {
+            var scriptURL = "https://script.google.com/macros/s/AKfycby_-5K5U40NT0lrY7H5u6otPKwEO8-a9ZdUtxuW1CPVcA6f7w0Xlv-anhUvMIKXynLHKw/exec";
+            var rawData = [];
+            var tableWrapper = document.getElementById('tableWrapper');
+            var reportRows = document.getElementById('reportRows');
+            var loadingState = document.getElementById('loadingState');
+            var emptyState = document.getElementById('emptyState');
+            var teacherFilter = document.getElementById('teacherFilter');
+            var studentFilter = document.getElementById('studentFilter');
+            var statCount = document.getElementById('statCount');
+            var refreshBtn = document.getElementById('refreshBtn');
 
-        async function fetchData() {
-            loadingState.classList.remove('hidden');
-            tableWrapper.classList.add('hidden');
-            emptyState.classList.add('hidden');
-
-            try {
-                const response = await fetch(`${scriptURL}?mode=getReports`);
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                rawData = Array.isArray(data) ? data : [];
-                populateTeacherFilter();
-                updateStudentFilter();
-                renderReports();
-            } catch (error) {
-                console.error("Fetch failed", error);
-                loadingState.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-            }
-        }
-
-        function populateTeacherFilter() {
-            const teachers = [...new Set(rawData.map(item => item.teacher))].filter(Boolean).sort();
-            teacherFilter.innerHTML = '<option value="all">All Classes</option>' + 
-                teachers.map(t => `<option value="${t}">${t}</option>`).join('');
-        }
-
-        function updateStudentFilter() {
-            const selectedTeacher = teacherFilter.value;
-            const filteredData = selectedTeacher === 'all' ? rawData : rawData.filter(item => item.teacher === selectedTeacher);
-            const studentsSet = new Set();
-            filteredData.forEach(item => {
-                if (!item.students) return;
-                const parts = item.students.split(', ');
-                for (let i = 0; i < parts.length; i += 2) {
-                    if (parts[i] && parts[i+1]) studentsSet.add(`${parts[i]}, ${parts[i+1]}`);
-                    else if (parts[i]) studentsSet.add(parts[i]);
+            function formatImageUrl(url) {
+                if (!url) return null;
+                if (url.indexOf('drive.google.com') !== -1) {
+                    var match = url.match(/[-\w]{25,}/);
+                    if (match) return "https://lh3.googleusercontent.com/u/0/d/" + match[0];
                 }
-            });
-            const sortedStudents = Array.from(studentsSet).sort();
-            const currentSelection = studentFilter.value;
-            studentFilter.innerHTML = '<option value="all">All Students</option>' + 
-                sortedStudents.map(s => `<option value="${s}">${s}</option>`).join('');
-            if (sortedStudents.includes(currentSelection)) studentFilter.value = currentSelection;
-        }
-
-        function openModal(src) {
-            document.getElementById('modalImg').src = src;
-            document.getElementById('imageModal').style.display = 'flex';
-        }
-
-        function renderReports() {
-            const selectedTeacher = teacherFilter.value;
-            const selectedStudent = studentFilter.value;
-
-            const filtered = rawData.filter(item => {
-                const teacherMatch = selectedTeacher === 'all' || item.teacher === selectedTeacher;
-                const studentMatch = selectedStudent === 'all' || (item.students && item.students.includes(selectedStudent));
-                return teacherMatch && studentMatch;
-            }).reverse();
-
-            statCount.innerText = filtered.length;
-            loadingState.classList.add('hidden');
-
-            if (filtered.length === 0) {
-                tableWrapper.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                return;
+                return url;
             }
 
-            emptyState.classList.add('hidden');
-            tableWrapper.classList.remove('hidden');
+            function openModal(src) {
+                document.getElementById('modalImg').src = src;
+                document.getElementById('imageModal').style.display = 'flex';
+            }
+            window.openModal = openModal;
 
-            reportRows.innerHTML = filtered.map(item => {
-                const date = item.timestamp ? new Date(item.timestamp).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : 'N/A';
+            function renderReports() {
+                var selectedTeacher = teacherFilter.value;
+                var selectedStudent = studentFilter.value;
+
+                var filtered = rawData.filter(function(item) {
+                    var teacherMatch = selectedTeacher === 'all' || item.teacher === selectedTeacher;
+                    var studentMatch = selectedStudent === 'all' || (item.students && item.students.indexOf(selectedStudent) !== -1);
+                    return teacherMatch && studentMatch;
+                }).reverse();
+
+                statCount.innerText = filtered.length;
+                loadingState.classList.add('hidden');
+
+                if (filtered.length === 0) {
+                    tableWrapper.classList.add('hidden');
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                emptyState.classList.add('hidden');
+                tableWrapper.classList.remove('hidden');
+
+                var rowsHtml = filtered.map(function(item) {
+                    var dateStr = 'N/A';
+                    var timeStr = '';
+                    
+                    if (item.timestamp) {
+                        var dt = new Date(item.timestamp);
+                        dateStr = dt.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+                        timeStr = dt.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'});
+                    }
+                    
+                    var rawImg = item.imageUrl || item.imageurl || item['image url'] || item.image_url || item.imagedata;
+                    var imgSource = formatImageUrl(rawImg);
+                    var note = item.comment || item.description || item.ObservationNote || '---';
+                    var expectations = (item.expectations || '').split('; ').filter(function(ex) { return ex !== ''; });
+
+                    var imgHtml = imgSource ? 
+                        '<img src="' + imgSource + '" onclick="openModal(\'' + imgSource + '\')" onerror="this.parentElement.innerHTML=\'<div class=\\\'text-[8px] text-red-400\\\'>View Error</div>\'" class="img-thumbnail border border-slate-200" alt="Observation">' : 
+                        '<div class="w-12 h-10 bg-slate-50 rounded flex items-center justify-center text-[9px] text-slate-300 border border-slate-100">No Img</div>';
+
+                    var expectationsHtml = expectations.map(function(ex) {
+                        return '<span class="text-[8px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-100">' + ex + '</span>';
+                    }).join('');
+
+                    return '<tr class="hover:bg-slate-50 transition-colors">' +
+                        '<td class="px-6 py-4 whitespace-nowrap text-slate-500 font-medium text-[11px]">' +
+                            '<div class="font-bold text-slate-700">' + dateStr + '</div>' +
+                            '<div class="text-[10px] text-slate-400 mt-0.5">' + timeStr + '</div>' +
+                        '</td>' +
+                        '<td class="px-6 py-4">' + imgHtml + '</td>' +
+                        '<td class="px-6 py-4 font-bold text-slate-700 text-xs">' + (item.students || '---') + '</td>' +
+                        '<td class="px-6 py-4 max-w-xs">' +
+                            '<span class="block text-[9px] font-black text-blue-600 uppercase mb-1">' + (item.frame || 'General') + '</span>' +
+                            '<div class="flex flex-wrap gap-1">' + expectationsHtml + '</div>' +
+                        '</td>' +
+                        '<td class="px-6 py-4 text-slate-600 leading-relaxed text-xs min-w-[200px]">' + note + '</td>' +
+                        '<td class="px-6 py-4 text-slate-500 text-[11px] font-semibold">' + (item.teacher || '---') + '</td>' +
+                    '</tr>';
+                }).join('');
                 
-                // DATA ACCESS: Look for the suggested standardized key "imageUrl" 
-                // but also check common normalization results from Apps Script
-                const imgSource = item.imageurl || item.imageUrl || item['image url'] || item.imagedata;
+                reportRows.innerHTML = rowsHtml;
+            }
 
-                // Handle Comment/Description field based on your new header "Comment"
-                const note = item.comment || item.description || '---';
+            function updateStudentFilter() {
+                var selectedTeacher = teacherFilter.value;
+                var filteredData = selectedTeacher === 'all' ? rawData : rawData.filter(function(item) { return item.teacher === selectedTeacher; });
+                var studentsSet = {};
+                filteredData.forEach(function(item) {
+                    if (!item.students) return;
+                    var parts = item.students.split(', ');
+                    for (var i = 0; i < parts.length; i += 2) {
+                        if (parts[i] && parts[i+1]) studentsSet[parts[i] + ", " + parts[i+1]] = true;
+                        else if (parts[i]) studentsSet[parts[i]] = true;
+                    }
+                });
+                var sortedStudents = Object.keys(studentsSet).sort();
+                studentFilter.innerHTML = '<option value="all">All Students</option>' + 
+                    sortedStudents.map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+            }
 
-                return `
-                <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-6 py-4 whitespace-nowrap text-slate-400 font-medium text-[11px]">${date}</td>
-                    <td class="px-6 py-4">
-                        ${imgSource ? `
-                            <img src="${imgSource}" onclick="openModal('${imgSource}')" class="img-thumbnail border border-slate-200" alt="Observation">
-                        ` : '<div class="w-12 h-10 bg-slate-50 rounded flex items-center justify-center text-[9px] text-slate-300 border border-slate-100">No Img</div>'}
-                    </td>
-                    <td class="px-6 py-4 font-bold text-slate-700 text-xs">${item.students || '---'}</td>
-                    <td class="px-6 py-4 max-w-xs">
-                        <span class="block text-[9px] font-black text-blue-600 uppercase mb-1">${item.frame || 'General'}</span>
-                        <div class="flex flex-wrap gap-1">
-                            ${(item.expectations || '').split('; ').map(ex => ex ? `
-                                <span class="text-[8px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-100">${ex}</span>
-                            ` : '').join('')}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 text-slate-600 leading-relaxed text-xs min-w-[200px]">${note}</td>
-                    <td class="px-6 py-4 text-slate-500 text-[11px] font-semibold">${item.teacher || '---'}</td>
-                </tr>
-            `}).join('');
-        }
+            function populateTeacherFilter() {
+                var teachersSet = {};
+                rawData.forEach(function(item) { if(item.teacher) teachersSet[item.teacher] = true; });
+                var teachers = Object.keys(teachersSet).sort();
+                teacherFilter.innerHTML = '<option value="all">All Classes</option>' + 
+                    teachers.map(function(t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+            }
 
-        teacherFilter.addEventListener('change', () => { updateStudentFilter(); renderReports(); });
-        studentFilter.addEventListener('change', renderReports);
-        refreshBtn.addEventListener('click', fetchData);
-        fetchData();
+            function fetchData() {
+                loadingState.classList.remove('hidden');
+                tableWrapper.classList.add('hidden');
+                emptyState.classList.add('hidden');
+
+                fetch(scriptURL + "?mode=getReports")
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        if (data.error) throw new Error(data.error);
+                        rawData = Array.isArray(data) ? data : [];
+                        populateTeacherFilter();
+                        updateStudentFilter();
+                        renderReports();
+                    })
+                    .catch(function(error) {
+                        console.error("Fetch failed", error);
+                        loadingState.classList.add('hidden');
+                        emptyState.classList.remove('hidden');
+                    });
+            }
+
+            teacherFilter.addEventListener('change', function() { updateStudentFilter(); renderReports(); });
+            studentFilter.addEventListener('change', renderReports);
+            refreshBtn.addEventListener('click', fetchData);
+            
+            // Start fetch
+            fetchData();
+        })();
     </script>
 </body>
 </html>
