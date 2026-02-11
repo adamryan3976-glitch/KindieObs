@@ -208,6 +208,11 @@
             filtered.forEach(obs => {
                 const img = formatImageUrl(obs.imageurl || obs.imagedata || obs.imageUrl || obs['image url']);
                 const date = obs.timestamp ? new Date(obs.timestamp).toLocaleDateString() : '---';
+                
+                // MAPPING: E is expectations, F is comment/description
+                const expectationText = obs.expectations || obs.Expectations || '---';
+                const notesText = obs.comment || obs.Comment || obs.description || obs.Description || obs.notes || 'No notes.';
+
                 html += `
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full break-inside-avoid">
                         <div class="flex justify-between items-start mb-4">
@@ -216,9 +221,9 @@
                         </div>
                         <div class="flex-grow">
                              <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Expectation</p>
-                             <h4 class="font-bold text-slate-800 leading-tight mb-4">${obs.expectations || '---'}</h4>
+                             <h4 class="font-bold text-slate-800 leading-tight mb-4">${expectationText}</h4>
                              <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Notes</p>
-                             <p class="text-slate-600 text-sm italic leading-relaxed">"${obs.description || obs.notes || obs.Comment || 'No notes.'}"</p>
+                             <p class="text-slate-600 text-sm italic leading-relaxed">"${notesText}"</p>
                         </div>
                         ${img ? `<img src="${img}" class="mt-4 h-48 w-full object-cover rounded-xl shadow-inner">` : ''}
                     </div>
@@ -273,6 +278,10 @@
                 const img = formatImageUrl(obs.imageurl || obs.imagedata || obs.imageUrl || obs['image url']);
                 const date = obs.timestamp ? new Date(obs.timestamp).toLocaleDateString(undefined, {month:'long', day:'numeric', year:'numeric'}) : '---';
                 
+                // MAPPING: E is expectations, F is comment/description
+                const expectationText = obs.expectations || obs.Expectations || 'Learning Moment';
+                const notesText = obs.comment || obs.Comment || obs.description || obs.Description || obs.notes || 'Observation recorded.';
+
                 html += `
                     <div class="border-l-4 border-slate-200 pl-8 py-4 mb-8 break-inside-avoid">
                         <div class="flex items-center gap-4 mb-4">
@@ -281,8 +290,8 @@
                             <span class="px-3 py-1 bg-slate-100 text-[10px] font-black rounded-full uppercase text-slate-500">${obs.frame || 'General'}</span>
                         </div>
                         
-                        <h3 class="text-2xl font-extrabold text-slate-800 mb-2 leading-tight">${obs.expectations || 'Learning Moment'}</h3>
-                        <p class="text-lg text-slate-600 leading-relaxed mb-6 italic">"${obs.description || obs.notes || obs.Comment || 'Observation recorded.'}"</p>
+                        <h3 class="text-2xl font-extrabold text-slate-800 mb-2 leading-tight">${expectationText}</h3>
+                        <p class="text-lg text-slate-600 leading-relaxed mb-6 italic">"${notesText}"</p>
                         
                         ${img ? `<div class="rounded-3xl overflow-hidden shadow-lg border border-slate-50 mb-4"><img src="${img}" class="w-full h-auto max-h-[500px] object-cover"></div>` : ''}
                     </div>
