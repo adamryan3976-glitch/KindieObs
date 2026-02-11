@@ -155,7 +155,8 @@
     </main>
 
     <script>
-        const scriptURL = "https://script.google.com/macros/s/AKfycby_-5K5U40NT0lrY7H5u6otPKwEO8-a9ZdUtxuW1CPVcA6f7w0Xlv-anhUvMIKXynLHKw/exec"; 
+        // Ensure this matches your most recent Web App URL
+        const scriptURL = "https://script.google.com/macros/s/AKfycbwSIWLP94Oa_jILEPdXDWb9XlmfXB0iWjicvy3ugqJO8JOIdTdCtoSBut5-X9MoZMMp3w/exec"; 
         
         let allClassData = {};
         let selectedStudents = new Set();
@@ -184,6 +185,7 @@
         const statusMsg = document.getElementById('statusMsg');
         const submitBtn = document.getElementById('submitBtn');
 
+        // Handle incoming data from the relay popup
         window.addEventListener("message", (e) => { 
             if (e.data && typeof e.data === 'object' && !e.data.type) handleSyncSuccess(e.data); 
         }, false);
@@ -192,16 +194,29 @@
             window.open(`${scriptURL}?relay=true`, 'KDocRelay', 'width=400,height=400'); 
         }
 
+        // Global callback for JSONP
         window.handleClassData = (data) => handleSyncSuccess(data);
 
         function handleSyncSuccess(data) {
-            if (data.error) { showStatus("Sync Error", "bg-red-100"); return; }
+            if (!data || data.error) { showStatus("Sync Error: " + (data ? data.error : "No data"), "bg-red-100 text-red-700"); return; }
+            
             allClassData = data;
             teacherSelect.innerHTML = '<option value="">Choose Teacher...</option>';
-            Object.keys(data).forEach(t => {
+            
+            // Map keys (Teachers) to the dropdown
+            const teachers = Object.keys(data);
+            if (teachers.length === 0) {
+                showStatus("No teachers found in ClassData sheet.", "bg-orange-100 text-orange-700");
+                return;
+            }
+
+            teachers.forEach(t => {
                 const opt = document.createElement('option');
-                opt.value = t; opt.textContent = t; teacherSelect.appendChild(opt);
+                opt.value = t; 
+                opt.textContent = t; 
+                teacherSelect.appendChild(opt);
             });
+
             relayContainer.classList.add('hidden');
             teacherSelect.classList.remove('hidden');
             document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-green-500";
@@ -209,7 +224,10 @@
         }
 
         teacherSelect.onchange = (e) => {
-            const t = e.target.value; studentList.innerHTML = ''; selectedStudents.clear();
+            const t = e.target.value; 
+            studentList.innerHTML = ''; 
+            selectedStudents.clear();
+            
             if (t && allClassData[t]) {
                 studentContainer.classList.remove('hidden');
                 allClassData[t].forEach(s => {
@@ -218,16 +236,26 @@
                     chip.className = "chip bg-slate-100 px-4 py-2 rounded-full text-sm font-medium border border-slate-200 active:scale-95";
                     chip.textContent = s;
                     chip.onclick = () => {
-                        if (selectedStudents.has(s)) { selectedStudents.delete(s); chip.classList.remove('selected'); }
-                        else { selectedStudents.add(s); chip.classList.add('selected'); }
+                        if (selectedStudents.has(s)) { 
+                            selectedStudents.delete(s); 
+                            chip.classList.remove('selected'); 
+                        } else { 
+                            selectedStudents.add(s); 
+                            chip.classList.add('selected'); 
+                        }
                     };
                     studentList.appendChild(chip);
                 });
+            } else {
+                studentContainer.classList.add('hidden');
             }
         };
 
         frameSelect.onchange = (e) => {
-            const f = e.target.value; expectationList.innerHTML = ''; selectedExpectations.clear();
+            const f = e.target.value; 
+            expectationList.innerHTML = ''; 
+            selectedExpectations.clear();
+            
             if (f && expectationsMap[f]) {
                 expectationContainer.classList.remove('hidden');
                 expectationsMap[f].forEach(exp => {
@@ -235,12 +263,19 @@
                     chip.className = "chip bg-slate-100 px-3 py-2 rounded-lg text-xs border border-slate-200 text-left active:scale-95";
                     chip.textContent = exp;
                     chip.onclick = () => {
-                        if (selectedExpectations.has(exp)) { selectedExpectations.delete(exp); chip.classList.remove('selected'); }
-                        else { selectedExpectations.add(exp); chip.classList.add('selected'); }
+                        if (selectedExpectations.has(exp)) { 
+                            selectedExpectations.delete(exp); 
+                            chip.classList.remove('selected'); 
+                        } else { 
+                            selectedExpectations.add(exp); 
+                            chip.classList.add('selected'); 
+                        }
                     };
                     expectationList.appendChild(chip);
                 });
-            } else { expectationContainer.classList.add('hidden'); }
+            } else { 
+                expectationContainer.classList.add('hidden'); 
+            }
         };
 
         cameraInput.onchange = (e) => {
@@ -252,8 +287,10 @@
                     img.onload = () => {
                         const canvas = document.getElementById('compressCanvas');
                         const ctx = canvas.getContext('2d');
-                        const maxW = 800; const scale = maxW / img.width;
-                        canvas.width = maxW; canvas.height = img.height * scale;
+                        const maxW = 800; 
+                        const scale = maxW / img.width;
+                        canvas.width = maxW; 
+                        canvas.height = img.height * scale;
                         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         compressedImageData = canvas.toDataURL("image/jpeg", 0.7);
                         preview.src = compressedImageData;
@@ -271,7 +308,7 @@
 
         docForm.onsubmit = async (e) => {
             e.preventDefault();
-            if (selectedStudents.size === 0) return showStatus("Select students.", "bg-orange-100");
+            if (selectedStudents.size === 0) return showStatus("Please select at least one student.", "bg-orange-100 text-orange-700");
             
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loading-spinner"></span> Sending...';
@@ -286,27 +323,42 @@
             };
 
             try {
+                // Using POST for data submission
                 await fetch(scriptURL, { 
                     method: 'POST', 
                     mode: 'no-cors', 
                     body: JSON.stringify(payload)
                 });
+                
                 showStatus("✅ Observation Submitted!", "bg-green-100 text-green-700");
+                
+                // Reset form state
                 docForm.reset();
-                selectedStudents.clear(); selectedExpectations.clear();
-                studentContainer.classList.add('hidden'); expectationContainer.classList.add('hidden');
-                preview.style.display = 'none'; placeholder.style.display = 'block';
-                retakeBtn.classList.add('hidden'); compressedImageData = "";
-            } catch (err) { showStatus("❌ Error.", "bg-red-100"); }
-            finally { submitBtn.disabled = false; submitBtn.innerText = "Submit Observation"; }
+                selectedStudents.clear(); 
+                selectedExpectations.clear();
+                studentContainer.classList.add('hidden'); 
+                expectationContainer.classList.add('hidden');
+                preview.style.display = 'none'; 
+                placeholder.style.display = 'block';
+                retakeBtn.classList.add('hidden'); 
+                compressedImageData = "";
+            } catch (err) { 
+                showStatus("❌ Error submitting. Please check connection.", "bg-red-100 text-red-700"); 
+            } finally { 
+                submitBtn.disabled = false; 
+                submitBtn.innerText = "Submit Observation"; 
+            }
         };
 
         function showStatus(m, c) {
-            statusMsg.innerText = m; statusMsg.className = "p-4 rounded-xl text-sm font-bold shadow-sm " + c;
-            statusMsg.classList.remove('hidden'); setTimeout(() => statusMsg.classList.add('hidden'), 5000);
+            statusMsg.innerText = m; 
+            statusMsg.className = "p-4 rounded-xl text-sm font-bold shadow-sm " + c;
+            statusMsg.classList.remove('hidden'); 
+            setTimeout(() => statusMsg.classList.add('hidden'), 5000);
         }
 
-        (function auto() {
+        // Auto-run initial sync on load using JSONP
+        (function autoSync() {
             const s = document.createElement('script');
             s.src = `${scriptURL}?callback=handleClassData&v=${Date.now()}`;
             document.body.appendChild(s);
