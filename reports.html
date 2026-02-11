@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>K-Doc | Analytics Dashboard</title>
+    
+    <!-- Unique K-Doc Favicon (Blue square with white 'K') -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill=' %232563eb'/%3E%3Ctext x='50%25' y='50%25' domaint-anchor='middle' dy='.35em' font-family='Arial, sans-serif' font-size='60' font-weight='900' fill='white' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
@@ -209,7 +213,6 @@
                 const img = formatImageUrl(obs.imageurl || obs.imagedata || obs.imageUrl || obs['image url']);
                 const date = obs.timestamp ? new Date(obs.timestamp).toLocaleDateString() : '---';
                 
-                // MAPPING: E is expectations, F is comment/description
                 const expectationText = obs.expectations || obs.Expectations || '---';
                 const notesText = obs.comment || obs.Comment || obs.description || obs.Description || obs.notes || 'No notes.';
 
@@ -278,7 +281,6 @@
                 const img = formatImageUrl(obs.imageurl || obs.imagedata || obs.imageUrl || obs['image url']);
                 const date = obs.timestamp ? new Date(obs.timestamp).toLocaleDateString(undefined, {month:'long', day:'numeric', year:'numeric'}) : '---';
                 
-                // MAPPING: E is expectations, F is comment/description
                 const expectationText = obs.expectations || obs.Expectations || 'Learning Moment';
                 const notesText = obs.comment || obs.Comment || obs.description || obs.Description || obs.notes || 'Observation recorded.';
 
