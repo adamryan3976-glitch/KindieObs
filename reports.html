@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Doc Reports</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .report-card {
+            transition: transform 0.2s ease, shadow 0.2s ease;
+        }
+        .report-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        @media print {
+            .no-print { display: none !important; }
+            .print-break { page-break-after: always; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+
+    <!-- Navigation / Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 no-print">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 text-white p-1.5 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-slate-800">K-Doc Analytics</h1>
+            </div>
+            <button onclick="window.print()" class="text-sm font-semibold bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg transition-colors">
+                Print Report
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-4 md:p-8">
+        
+        <!-- Filters Bar -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Class Filter -->
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">View by Class/Teacher</label>
+                    <select id="teacherFilter" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">All Classes</option>
+                    </select>
+                </div>
+
+                <!-- Student Filter -->
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Filter by Student</label>
+                    <select id="studentFilter" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">All Students</option>
+                    </select>
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="flex items-end gap-4">
+                    <div class="flex-1 bg-blue-50 p-3 rounded-xl border border-blue-100">
+                        <span class="block text-[10px] font-bold text-blue-600 uppercase">Total Observations</span>
+                        <span id="statCount" class="text-2xl font-black text-blue-700">0</span>
+                    </div>
+                    <button id="refreshBtn" class="p-3 bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Container -->
+        <div id="loadingState" class="space-y-4">
+            <div class="h-40 w-full loading-shimmer rounded-2xl"></div>
+            <div class="h-40 w-full loading-shimmer rounded-2xl"></div>
+        </div>
+
+        <div id="reportList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+            <!-- Observations will be injected here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden text-center py-20">
+            <span class="text-6xl block mb-4">🔍</span>
+            <h3 class="text-xl font-bold text-slate-700">No observations found</h3>
+            <p class="text-slate-500">Try adjusting your filters or sync your data.</p>
+        </div>
+    </main>
+
+    <script>
+        const scriptURL = "https://script.google.com/macros/s/AKfycby_-5K5U40NT0lrY7H5u6otPKwEO8-a9ZdUtxuW1CPVcA6f7w0Xlv-anhUvMIKXynLHKw/exec";
+        
+        let rawData = [];
+        const reportList = document.getElementById('reportList');
+        const loadingState = document.getElementById('loadingState');
+        const emptyState = document.getElementById('emptyState');
+        const teacherFilter = document.getElementById('teacherFilter');
+        const studentFilter = document.getElementById('studentFilter');
+        const statCount = document.getElementById('statCount');
+        const refreshBtn = document.getElementById('refreshBtn');
+
+        async function fetchData() {
+            loadingState.classList.remove('hidden');
+            reportList.classList.add('hidden');
+            emptyState.classList.add('hidden');
+
+            try {
+                // Fetching the JSON data directly
+                const response = await fetch(`${scriptURL}?mode=getReports`);
+                const data = await response.json();
+                
+                // If the script returns an error object (e.g., sheet not found)
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                rawData = Array.isArray(data) ? data : [];
+                populateFilters();
+                renderReports();
+            } catch (error) {
+                console.error("Fetch failed", error);
+                reportList.innerHTML = `<div class="col-span-full p-8 bg-orange-50 border border-orange-200 rounded-2xl text-orange-800">
+                    <h3 class="font-bold">Sync Error</h3>
+                    <p class="text-sm">Could not retrieve data. Error: ${error.message}</p>
+                    <p class="text-xs mt-2 italic text-orange-600">Note: Ensure your Google Apps Script is deployed as a Web App with access for "Anyone".</p>
+                </div>`;
+                reportList.classList.remove('hidden');
+                loadingState.classList.add('hidden');
+            }
+        }
+
+        function populateFilters() {
+            if (!rawData.length) return;
+            const teachers = [...new Set(rawData.map(item => item.teacher))].filter(Boolean);
+            const students = [...new Set(rawData.flatMap(item => (item.students || '').split(', ')))].filter(Boolean).sort();
+
+            teacherFilter.innerHTML = '<option value="all">All Classes</option>' + 
+                teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+
+            studentFilter.innerHTML = '<option value="all">All Students</option>' + 
+                students.map(s => `<option value="${s}">${s}</option>`).join('');
+        }
+
+        function renderReports() {
+            const selectedTeacher = teacherFilter.value;
+            const selectedStudent = studentFilter.value;
+
+            const filtered = rawData.filter(item => {
+                const teacherMatch = selectedTeacher === 'all' || item.teacher === selectedTeacher;
+                const studentMatch = selectedStudent === 'all' || (item.students && item.students.includes(selectedStudent));
+                return teacherMatch && studentMatch;
+            }).reverse();
+
+            statCount.innerText = filtered.length;
+            loadingState.classList.add('hidden');
+
+            if (filtered.length === 0) {
+                reportList.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            reportList.classList.remove('hidden');
+
+            reportList.innerHTML = filtered.map(item => `
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden report-card flex flex-col">
+                    ${item.imagedata ? `
+                        <div class="h-48 overflow-hidden bg-slate-100">
+                            <img src="${item.imagedata}" class="w-full h-full object-cover" alt="Observation" loading="lazy">
+                        </div>
+                    ` : ''}
+                    <div class="p-5 flex-1 space-y-3">
+                        <div class="flex justify-between items-start">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                ${item.frame || 'N/A'}
+                            </span>
+                            <span class="text-[10px] text-slate-400 font-medium">
+                                ${item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Recent'}
+                            </span>
+                        </div>
+                        
+                        <h4 class="font-bold text-slate-800 leading-tight">
+                            ${item.students || 'Unidentified Student'}
+                        </h4>
+
+                        <p class="text-sm text-slate-600 line-clamp-4">
+                            ${item.description || 'No notes recorded.'}
+                        </p>
+
+                        ${item.expectations ? `
+                            <div class="pt-2">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Alignment</div>
+                                <div class="flex flex-wrap gap-1">
+                                    ${item.expectations.split('; ').map(ex => `
+                                        <span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">${ex}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="p-4 bg-slate-50 border-t border-slate-100 text-[10px] font-bold text-slate-500 uppercase flex justify-between">
+                        <span>Teacher: ${item.teacher || 'Default'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        teacherFilter.addEventListener('change', renderReports);
+        studentFilter.addEventListener('change', renderReports);
+        refreshBtn.addEventListener('click', fetchData);
+
+        fetchData();
+    </script>
+</body>
+</html>
