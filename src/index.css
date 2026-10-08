@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* K-Doc palette: "brand" is the K-Doc blue, "gold" is the accent bar under the K. */
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+  --color-brand-950: #172554;
+
+  --color-gold-100: #fdf0d2;
+  --color-gold-300: #f8cd6c;
+  --color-gold-500: #f5b428;
+  --color-gold-700: #b07a0c;
+  --color-gold-900: #5c3f06;
+}
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body, .print-plain { background: white !important; }
+  .print-plain { box-shadow: none !important; border: 0 !important; padding: 0 !important; }
+  .break-inside-avoid { break-inside: avoid; }
+}

@@ -1,0 +1,276 @@
+// =======================================================================
+// COMBINED RULES for the shared Firebase project: FDK Letters + K-Doc.
+// Paste this whole file into Firebase Console -> Firestore -> Rules and
+// click Publish. It replaces the FDK Letters rules, keeping them unchanged
+// and adding K-Doc's section near the bottom. Keep a copy of this same
+// file in both repos so neither app's update wipes out the other's rules.
+// =======================================================================
+
+rules_version = '2';
+
+// -----------------------------------------------------------------------
+// Data model
+// -----------------------------------------------------------------------
+// A class document lives at users/{ownerId}/classes/{classId}, owned by
+// the teacher who created it (ownerId == their Firebase Auth uid). It now
+// also carries a `collaborators` map: { [uid]: { email, displayName,
+// role, addedAt } }, where role is 'editor' or 'viewer'.
+//
+// Invitations live in a separate top-level collection, `invites/{inviteId}`,
+// with a DETERMINISTIC document id of `${classId}__${invitedEmail}` (the
+// invited email, lower-cased and trimmed by the client before being used
+// as part of the id or stored). This lets both the owner's rules and the
+// invitee's rules reconstruct the same document id without a query, and
+// guarantees at most one outstanding invite per class+email pair.
+//
+// Sign-in is Google-only in this app, and Google's OAuth `email` claim on
+// the ID token is the account's own canonical (already lower-cased)
+// address, so `request.auth.token.email` can be compared directly against
+// a lower-cased `invitedEmail` field without needing a `.lower()` call in
+// the rules language.
+//
+// Accepting an invite is a write the INVITEE's own client performs on the
+// class document (there is no server/Cloud Function in this app), adding
+// exactly one new entry to `collaborators` for their own uid. That write
+// is only allowed when a matching, pending invite document exists for
+// that class + their email — enforced with a `get()` lookup inside the
+// class document's own update rule, so a forged write can't grant access
+// to a class the requester was never invited to.
+// -----------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{ownerId}/classes/{classId} {
+      function collaborators() {
+        return resource.data.get('collaborators', {});
+      }
+
+      function isOwner() {
+        return request.auth != null && request.auth.uid == ownerId;
+      }
+
+      function isCollaborator() {
+        return request.auth != null && request.auth.uid in collaborators();
+      }
+
+      function isEditor() {
+        return isCollaborator() && collaborators()[request.auth.uid].role == 'editor';
+      }
+
+      // The invite doc id this class would use for the signed-in user's
+      // own email, so an invitee can be matched without a query.
+      function myInviteId() {
+        return classId + '__' + request.auth.token.email;
+      }
+
+      function myInvite() {
+        return get(/databases/$(database)/documents/invites/$(myInviteId())).data;
+      }
+
+      // True when the signed-in user is not yet a collaborator, but holds
+      // a pending invite to this exact class from its actual owner, and
+      // this write does nothing except add themselves -- with the role
+      // the invite grants -- to the collaborators map.
+      function isAcceptingOwnInvite() {
+        return request.auth != null &&
+          !isCollaborator() &&
+          myInvite().status == 'pending' &&
+          myInvite().ownerId == ownerId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators']) &&
+          request.resource.data.collaborators.diff(collaborators()).affectedKeys().hasOnly([request.auth.uid]) &&
+          request.resource.data.collaborators[request.auth.uid].role == myInvite().role &&
+          request.resource.data.collaborators[request.auth.uid].email == request.auth.token.email;
+      }
+
+      // True when an existing collaborator is removing only their own
+      // entry from the collaborators map (leaving the class), touching
+      // nothing else.
+      function isRemovingSelf() {
+        return isCollaborator() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators']) &&
+          !(request.auth.uid in request.resource.data.get('collaborators', {})) &&
+          collaborators().diff(request.resource.data.get('collaborators', {})).affectedKeys().hasOnly([request.auth.uid]);
+      }
+
+      // True when an editor collaborator is updating class data (roster,
+      // assessment periods, assessments) without touching who has access.
+      function isEditorUpdatingData() {
+        return isEditor() &&
+          request.resource.data.collaborators == collaborators();
+      }
+
+      allow read: if isOwner() || isCollaborator();
+
+      allow create: if isOwner();
+
+      allow update: if isOwner() || isEditorUpdatingData() || isAcceptingOwnInvite() || isRemovingSelf();
+
+      // Only the owner can delete the class itself.
+      allow delete: if isOwner();
+    }
+
+    match /invites/{inviteId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.ownerId || request.auth.token.email == resource.data.invitedEmail);
+
+      // Only the class owner can create an invite, and only for a class
+      // they themselves own. Either the owner (cancelling/revoking) or the
+      // invited person (declining) can delete an invite.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if request.auth != null &&
+        (request.auth.uid == resource.data.ownerId || request.auth.token.email == resource.data.invitedEmail);
+
+      // The owner can update an invite (e.g. changing the role before it
+      // is accepted). The invited person can update it too, but only to
+      // accept it: flipping status to 'accepted' and stamping their own
+      // uid, without changing which class, owner, email, or role it's for.
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.ownerId ||
+        (
+          request.auth.token.email == resource.data.invitedEmail &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.collaboratorUid == request.auth.uid &&
+          request.resource.data.classId == resource.data.classId &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.invitedEmail == resource.data.invitedEmail &&
+          request.resource.data.role == resource.data.role
+        )
+      );
+    }
+
+    // =====================================================================
+    // K-Doc (observations app) -- shares this Firebase project with
+    // FDK Letters but uses its own collections: kdocUsers/... and
+    // kdocInvites/... The sharing model is identical to FDK Letters above
+    // (owner + collaborators map with 'editor' / 'viewer' roles, accepted
+    // through a pending invite), plus an observations subcollection.
+    // =====================================================================
+
+    match /kdocUsers/{ownerId}/classes/{classId} {
+      function collaborators() {
+        return resource.data.get('collaborators', {});
+      }
+
+      function isOwner() {
+        return request.auth != null && request.auth.uid == ownerId;
+      }
+
+      function isCollaborator() {
+        return request.auth != null && request.auth.uid in collaborators();
+      }
+
+      function isEditor() {
+        return isCollaborator() && collaborators()[request.auth.uid].role == 'editor';
+      }
+
+      function myInviteId() {
+        return classId + '__' + request.auth.token.email;
+      }
+
+      function myInvite() {
+        return get(/databases/$(database)/documents/kdocInvites/$(myInviteId())).data;
+      }
+
+      function isAcceptingOwnInvite() {
+        return request.auth != null &&
+          !isCollaborator() &&
+          myInvite().status == 'pending' &&
+          myInvite().ownerId == ownerId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators']) &&
+          request.resource.data.collaborators.diff(collaborators()).affectedKeys().hasOnly([request.auth.uid]) &&
+          request.resource.data.collaborators[request.auth.uid].role == myInvite().role &&
+          request.resource.data.collaborators[request.auth.uid].email == request.auth.token.email;
+      }
+
+      function isRemovingSelf() {
+        return isCollaborator() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators']) &&
+          !(request.auth.uid in request.resource.data.get('collaborators', {})) &&
+          collaborators().diff(request.resource.data.get('collaborators', {})).affectedKeys().hasOnly([request.auth.uid]);
+      }
+
+      function isEditorUpdatingData() {
+        return isEditor() &&
+          request.resource.data.collaborators == collaborators();
+      }
+
+      allow read: if isOwner() || isCollaborator();
+      allow create: if isOwner();
+      allow update: if isOwner() || isEditorUpdatingData() || isAcceptingOwnInvite() || isRemovingSelf();
+      allow delete: if isOwner();
+
+      // Observations. `resource` here is the observation, so access is
+      // checked against the parent class document with get().
+      match /observations/{obsId} {
+        function parentClass() {
+          return get(/databases/$(database)/documents/kdocUsers/$(ownerId)/classes/$(classId)).data;
+        }
+
+        function isClassOwner() {
+          return request.auth != null && request.auth.uid == ownerId;
+        }
+
+        function isClassMember() {
+          return request.auth != null && request.auth.uid in parentClass().get('collaborators', {});
+        }
+
+        function canWrite() {
+          return isClassOwner() ||
+            (isClassMember() && parentClass().collaborators[request.auth.uid].role == 'editor');
+        }
+
+        function validObservation() {
+          return request.resource.data.keys().hasOnly(['studentIds', 'frame', 'expectations', 'note', 'photoId', 'createdAt', 'createdBy', 'createdByName']) &&
+            request.resource.data.studentIds is list &&
+            request.resource.data.studentIds.size() > 0 &&
+            request.resource.data.studentIds.size() <= 40 &&
+            request.resource.data.frame is string &&
+            request.resource.data.expectations is list &&
+            request.resource.data.expectations.size() <= 40 &&
+            request.resource.data.note is string &&
+            request.resource.data.note.size() <= 5000 &&
+            (request.resource.data.photoId == null || request.resource.data.photoId is string) &&
+            request.resource.data.createdAt is int &&
+            request.resource.data.createdBy is string;
+        }
+
+        allow read: if isClassOwner() || isClassMember();
+        // New observations must be stamped with the author's own uid.
+        allow create: if canWrite() && validObservation() && request.resource.data.createdBy == request.auth.uid;
+        // Edits can't change who wrote it or when.
+        allow update: if canWrite() && validObservation() &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if canWrite();
+      }
+    }
+
+    match /kdocInvites/{inviteId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.ownerId || request.auth.token.email == resource.data.invitedEmail);
+
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if request.auth != null &&
+        (request.auth.uid == resource.data.ownerId || request.auth.token.email == resource.data.invitedEmail);
+
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.ownerId ||
+        (
+          request.auth.token.email == resource.data.invitedEmail &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.collaboratorUid == request.auth.uid &&
+          request.resource.data.classId == resource.data.classId &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.invitedEmail == resource.data.invitedEmail &&
+          request.resource.data.role == resource.data.role
+        )
+      );
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
